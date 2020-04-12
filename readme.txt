@@ -1,0 +1,3 @@
+1.images folder ----> dataset ,60 (0-59) folder, 140 picture per folder
+2.main code file -----> cnnwithkfold.ipynb, open this file in google coolab (search google) or jupyter notebook
+3.cnnwithkfold.txt ---> only code...

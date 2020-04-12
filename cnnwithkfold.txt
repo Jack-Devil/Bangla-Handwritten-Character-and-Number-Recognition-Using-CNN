@@ -1,0 +1,146 @@
+import numpy as np
+import pandas as pd
+import os
+import sklearn
+
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import LabelEncoder
+import cv2
+from sklearn.model_selection import train_test_split
+from sklearn.utils import shuffle
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense,Dropout,Flatten
+from tensorflow.keras.layers import Conv2D,MaxPool2D
+from tensorflow.keras.layers import Input, Dense
+from keras.utils import to_categorical
+from tensorflow.keras.models import Model
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from keras import regularizers
+from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+from tensorflow.keras.applications.vgg16 import VGG16
+from sklearn.model_selection import KFold
+
+
+
+
+PATH = os.getcwd()
+print(PATH)
+PATH = './images/'
+data_dir_list = os.listdir(PATH)
+data_dir_list.sort(key=int)
+print(data_dir_list)
+
+
+img_rows=44
+img_cols=44
+num_channel=3
+
+img_data_list=[]
+classes_names_list=[]
+target_column=[]
+
+for dataset in data_dir_list:
+    classes_names_list.append(dataset)
+    print("Getting images from {} folder\n".format(dataset))
+    img_list = os.listdir(PATH+'/'+ dataset)
+    for img in img_list:
+        input_img = cv2.imread(PATH + '/' + dataset + '/' + img)
+        input_img_resize=cv2.resize(input_img,(img_rows,img_cols))
+        img_data_list.append(input_img_resize)
+        target_column.append(dataset)
+
+num_classes = len(classes_names_list)
+print(num_classes)
+
+img_data = np.array(img_data_list)
+img_data = img_data.astype('float32')
+img_data /= 255
+print(img_data.shape)
+
+num_of_samples = img_data.shape[0]
+input_shape = img_data[0].shape
+
+Labelencoder = LabelEncoder()
+target_column = Labelencoder.fit_transform(target_column)
+np.unique(target_column)
+
+target_column_hotcoded = to_categorical(target_column,num_classes)
+X,Y = shuffle(img_data,target_column_hotcoded,random_state=2)
+X_train,X_test,y_train,y_test = train_test_split(X,Y,test_size=0.2,random_state=2)
+
+acc_per_fold = []
+loss_per_fold = []
+
+inputs = np.concatenate((X_train, X_test), axis=0)
+targets = np.concatenate((y_train, y_test), axis=0)
+
+num_epoch = 50
+batch_size = 256
+
+num_folds = 4
+kfold = KFold(n_splits=num_folds, shuffle=True)
+
+validation_split = 0.2
+
+fold_no = 1
+for train, test in kfold.split(inputs, targets):
+    model = Sequential()
+
+    model.add(Conv2D(64, (3, 3), input_shape=input_shape, activation='relu', padding='same',kernel_regularizer=regularizers.l2(0.000001)))
+    model.add(Dropout(rate=0.2))
+    model.add(MaxPool2D(pool_size=(2, 2)))
+    model.add(Dropout(rate=0.2))
+
+    model.add(Conv2D(128, (3, 3), activation='relu', padding='same', kernel_regularizer=regularizers.l2(0.000001)))
+    model.add(Dropout(rate=0.2))
+    model.add(MaxPool2D(pool_size=(2, 2)))
+    model.add(Dropout(rate=0.2))
+
+    model.add(Conv2D(256, (3, 3), activation='relu', padding='same', kernel_regularizer=regularizers.l2(0.000001)))
+    model.add(Dropout(rate=0.2))
+    model.add(Conv2D(256, (3, 3), activation='relu', padding='same', kernel_regularizer=regularizers.l2(0.000001)))
+    model.add(Dropout(rate=0.2))
+    model.add(MaxPool2D(pool_size=(2, 2)))
+    model.add(Dropout(rate=0.2))
+
+    model.add(Conv2D(512, (3, 3), activation='relu', padding='same', kernel_regularizer=regularizers.l2(0.000001)))
+    model.add(Dropout(rate=0.2))
+    model.add(Conv2D(512, (3, 3), activation='relu', padding='same', kernel_regularizer=regularizers.l2(0.000001)))
+    model.add(Dropout(rate=0.2))
+    model.add(MaxPool2D(pool_size=(2, 2)))
+    model.add(Dropout(rate=0.2))
+
+    model.add(Flatten())
+    model.add(Dense(512, activation='relu', kernel_regularizer=regularizers.l2(0.000001)))
+    model.add(Dropout(rate=0.2))
+    model.add(Dense(512, activation='relu', kernel_regularizer=regularizers.l2(0.000001)))
+    model.add(Dropout(rate=0.2))
+    model.add(Dense(units=num_classes, activation="softmax"))
+
+
+    model.compile(loss='categorical_crossentropy',optimizer='adam',metrics=['accuracy'])
+    
+    print(f'Training for fold {fold_no} ...')
+
+    # Fit data to model
+    history = model.fit(inputs[train], targets[train],
+              batch_size=batch_size,
+              epochs=num_epoch,
+              verbose=1,
+              validation_split=validation_split)
+    scores = model.evaluate(inputs[test], targets[test], verbose=0)
+    print(f'Score for fold {fold_no}: {model.metrics_names[0]} of {scores[0]}; {model.metrics_names[1]} of {scores[1]*100}%')
+    acc_per_fold.append(scores[1] * 100)
+    loss_per_fold.append(scores[0])
+
+    # Increase fold number
+    fold_no = fold_no + 1
+
+
+print('Score per fold')
+for i in range(0, len(acc_per_fold)):
+  print(f'> Fold {i+1} - Loss: {loss_per_fold[i]} - Accuracy: {acc_per_fold[i]}%')
+print('Average scores for all folds:')
+print(f'> Accuracy: {np.mean(acc_per_fold)} (+- {np.std(acc_per_fold)})')
+print(f'> Loss: {np.mean(loss_per_fold)}')
